@@ -1,0 +1,13 @@
+{
+  "name": "irpf-2026",
+  "version": "1.0.0",
+  "description": "Documentos IRPF 2026 – Felipe Pereira da Conceição",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "express": "^4.19.0"
+  }
+}

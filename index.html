@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal Fiscal – Documentos para o Contador</title>
+<script>
+  (function() {
+    var t = localStorage.getItem('pf_theme') ||
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('fonts/inter-latin-400-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('fonts/inter-latin-600-normal.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('fonts/inter-latin-700-normal.woff2') format('woff2');
+  }
+
+  /* ── TOKENS ── */
+  :root {
+    --bg:          #F1F5F9;
+    --surface:     #FFFFFF;
+    --surface-2:   #F8FAFC;
+    --border:      #E2E8F0;
+    --primary:     #4F46E5;
+    --primary-h:   #4338CA;
+    --primary-sub: #EEF2FF;
+    --primary-txt: #3730A3;
+    --text:        #0F172A;
+    --text-2:      #475569;
+    --text-3:      #94A3B8;
+    --ok:          #059669; --ok-bg:   #ECFDF5;
+    --pend:        #DC2626; --pend-bg: #FEF2F2;
+    --warn:        #D97706; --warn-bg: #FFFBEB;
+    --info:        #0369A1; --info-bg: #F0F9FF;
+    --shadow-sm:   0 1px 3px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.04);
+    --shadow:      0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.07);
+    --shadow-lg:   0 8px 32px rgba(0,0,0,.12), 0 24px 64px rgba(0,0,0,.10);
+    --r:           12px;
+    --r-sm:        8px;
+    --t:           .2s cubic-bezier(.4,0,.2,1);
+  }
+
+  [data-theme="dark"] {
+    --bg:          #080E1A;
+    --surface:     #111827;
+    --surface-2:   #1A2435;
+    --border:      #1F2D42;
+    --primary:     #818CF8;
+    --primary-h:   #6366F1;
+    --primary-sub: #1E1B4B;
+    --primary-txt: #A5B4FC;
+    --text:        #F0F4FF;
+    --text-2:      #8899AA;
+    --text-3:      #3D5068;
+    --ok:          #34D399; --ok-bg:   #022C22;
+    --pend:        #F87171; --pend-bg: #300A0A;
+    --warn:        #FCD34D; --warn-bg: #291A00;
+    --info:        #67E8F9; --info-bg: #001F2B;
+    --shadow-sm:   0 1px 3px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.3);
+    --shadow:      0 1px 3px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.35);
+    --shadow-lg:   0 8px 32px rgba(0,0,0,.6), 0 24px 64px rgba(0,0,0,.5);
+  }
+
+  /* ── RESET ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: light dark; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 28px 16px 56px;
+    transition: background var(--t), color var(--t);
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  /* ── SITE HEADER ── */
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary) 0%, #7C3AED 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    box-shadow: 0 3px 10px rgba(79,70,229,.35);
+  }
+
+  .brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  .brand-hint {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 1px;
+  }
+
+  /* ── THEME TOGGLE ── */
+  .btn-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    transition: var(--t);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-icon:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-sub);
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #7C3AED 100%);
+    border-radius: var(--r);
+    padding: 32px;
+    color: #fff;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before,
+  .hero::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .hero::before {
+    width: 200px; height: 200px;
+    background: rgba(255,255,255,.05);
+    right: -40px; top: -60px;
+  }
+  .hero::after {
+    width: 120px; height: 120px;
+    background: rgba(255,255,255,.04);
+    right: 60px; bottom: -50px;
+  }
+
+  .hero h1 {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.3;
+    position: relative;
+  }
+
+  .hero p {
+    font-size: 13px;
+    line-height: 1.65;
+    opacity: .80;
+    margin-top: 7px;
+    max-width: 480px;
+    position: relative;
+  }
+
+  .hero-chips {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+
+  .chip {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 20px;
+    padding: 4px 11px;
+    font-size: 11.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .card-head-left {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .sec-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--primary-sub);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+
+  .sec-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: var(--primary-txt);
+  }
+
+  .badge-pend-count {
+    background: var(--pend-bg);
+    color: var(--pend);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  /* ── DOC LIST ── */
+  .doc-list { list-style: none; }
+
+  .doc-item {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--border);
+    transition: background var(--t);
+  }
+
+  .doc-item:last-child { border-bottom: none; }
+  .doc-item:hover { background: var(--surface-2); }
+
+  .doc-item.is-pending {
+    border-left: 3px solid var(--pend);
+    padding-left: 15px;
+  }
+
+  .item-ico {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+
+  .item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35;
+  }
+
+  .item-name a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+
+  .item-name a:hover { text-decoration: underline; }
+  .item-name a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+  .item-name.pend { color: var(--pend); }
+
+  .item-desc {
+    font-size: 11.5px;
+    color: var(--text-2);
+    margin-top: 2px;
+    line-height: 1.55;
+  }
+
+  .item-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+  }
+
+  .badge-ok   { background: var(--ok-bg);   color: var(--ok);   }
+  .badge-pend { background: var(--pend-bg); color: var(--pend); }
+  .badge-warn { background: var(--warn-bg); color: var(--warn); }
+  .badge-info { background: var(--info-bg); color: var(--info); }
+
+  /* ── FORM FIELDS ── */
+  .field-grid {
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+  }
+
+  .field-grid .field-full { grid-column: 1 / -1; }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .field label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    padding: 9px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13.5px;
+    outline: none;
+    transition: border-color var(--t), box-shadow var(--t), background var(--t);
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    background: var(--surface);
+  }
+
+  .field input::placeholder { color: var(--text-3); }
+
+  /* File upload field */
+  .upload-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .upload-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .upload-wrap {
+    position: relative;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    transition: border-color var(--t), background var(--t);
+    overflow: hidden;
+  }
+
+  .upload-wrap:hover,
+  .upload-wrap:focus-within {
+    border-color: var(--primary);
+    background: var(--primary-sub);
+  }
+
+  .upload-wrap input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-placeholder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 13px;
+    pointer-events: none;
+  }
+
+  .upload-placeholder-icon {
+    font-size: 15px;
+    opacity: .6;
+  }
+
+  .upload-placeholder-text {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .upload-placeholder-text span {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .upload-filename {
+    font-size: 11.5px;
+    color: var(--ok);
+    padding: 4px 13px 8px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .upload-ok-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .btn-clear-file {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 0 3px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color var(--t);
+  }
+
+  .btn-clear-file:hover { color: var(--pend); }
+
+  .btn-clear-all {
+    padding: 7px 13px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--pend);
+    background: var(--pend-bg);
+    color: var(--pend);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t), color var(--t);
+  }
+
+  .btn-clear-all:hover { background: var(--pend); color: #fff; }
+
+  /* ── NOTE ── */
+  .card-note {
+    padding: 10px 18px;
+    font-size: 11.5px;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    line-height: 1.55;
+  }
+
+  /* ── DIVIDER ── */
+  .upload-list {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ── FOOTER ── */
+  .site-footer {
+    margin-top: 36px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-3);
+    line-height: 1.8;
+  }
+
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%       { transform: translateX(-6px); }
+    40%       { transform: translateX(6px); }
+    60%       { transform: translateX(-3px); }
+    80%       { transform: translateX(3px); }
+  }
+
+  .fade-up { animation: fadeUp .4s cubic-bezier(.4,0,.2,1) both; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    body { padding: 16px 12px 48px; }
+    .hero { padding: 22px 18px; }
+    .hero h1 { font-size: 17px; }
+    .field-grid { grid-template-columns: 1fr; padding: 14px; gap: 11px; }
+    .field-grid .field-full { grid-column: auto; }
+    .doc-item { padding: 12px 14px; gap: 10px; }
+    .card-head { padding: 11px 14px; }
+    .upload-list { padding: 12px 14px; }
+    .lock-card { width: calc(100vw - 28px); padding: 34px 20px 26px; }
+    .site-header { margin-bottom: 18px; }
+  }
+
+  /* ── PRINT ── */
+  @media print {
+    body { background: #fff; padding: 0; }
+    #lock-screen { display: none !important; }
+    #app { display: block !important; opacity: 1 !important; }
+    .btn-icon { display: none; }
+  }
+  /* ── SUBMIT ── */
+  .req { color: var(--pend); margin-left: 2px; }
+  .field input.invalid,
+  .field textarea.invalid { border-color: var(--pend) !important; box-shadow: 0 0 0 3px rgba(220,38,38,.12); }
+
+  .submit-area { margin: 8px 0; }
+
+  .btn-submit {
+    width: 100%;
+    padding: 15px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--r);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.2px;
+    transition: background var(--t), transform .1s, box-shadow var(--t), opacity var(--t);
+    box-shadow: 0 4px 16px rgba(79,70,229,.35);
+  }
+
+  .btn-submit:hover:not(:disabled) { background: var(--primary-h); box-shadow: 0 6px 20px rgba(79,70,229,.45); }
+  .btn-submit:active:not(:disabled) { transform: scale(0.99); }
+  .btn-submit:disabled { opacity: .55; cursor: not-allowed; }
+
+  .submit-error {
+    color: var(--pend);
+    font-size: 12.5px;
+    margin-bottom: 10px;
+    min-height: 0;
+    line-height: 1.5;
+  }
+
+  .submit-success {
+    background: var(--ok-bg);
+    border: 1.5px solid var(--ok);
+    border-radius: var(--r);
+    padding: 32px 24px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+
+  .success-icon { font-size: 40px; margin-bottom: 12px; }
+  .success-title { font-size: 17px; font-weight: 700; color: var(--ok); margin-bottom: 7px; }
+  .success-sub { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+  .success-id { font-size: 11px; color: var(--text-3); margin-top: 10px; font-family: monospace; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<!-- App -->
+<div class="wrap" id="app">
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="brand">
+      <div class="brand-mark">📊</div>
+      <div>
+        <div class="brand-name">Portal Fiscal</div>
+        <div class="brand-hint">Envio de documentos ao contador</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-clear-all" id="btn-clear-all" onclick="clearAll()" title="Remover todos os arquivos selecionados" style="display:none">🗑 Limpar tudo</button>
+      <button class="btn-icon" id="theme-btn" title="Alternar modo claro/escuro">🌙</button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>Envie seus documentos fiscais</h1>
+    <p>Centralize aqui todos os documentos necessários para sua declaração de Imposto de Renda de forma segura e organizada.</p>
+    <div class="hero-chips">
+      <span class="chip">📤 Envio seguro de documentos</span>
+    </div>
+  </div>
+
+  <!-- Dados do Declarante -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">🪪</div>
+        <span class="sec-label">Dados do Declarante</span>
+      </div>
+      <button class="btn-clear-all" onclick="clearFields()" style="font-size:11.5px;padding:5px 11px">🗑 Limpar campos</button>
+    </div>
+    <div class="field-grid">
+      <div class="field field-full">
+        <label for="f-name">Nome completo <span class="req">*</span></label>
+        <input type="text" id="f-name" placeholder="Seu nome completo">
+      </div>
+      <div class="field">
+        <label for="f-cpf">CPF <span class="req">*</span></label>
+        <input type="text" id="f-cpf" placeholder="000.000.000-00" maxlength="14">
+      </div>
+      <div class="field">
+        <label for="f-dob">Data de nascimento <span class="req">*</span></label>
+        <input type="date" id="f-dob">
+      </div>
+      <div class="field">
+        <label for="f-titulo">Título de eleitor</label>
+        <input type="text" id="f-titulo" placeholder="Número do título de eleitor">
+      </div>
+      <div class="field">
+        <label for="f-govbr">Conta gov.br (login)</label>
+        <input type="text" id="f-govbr" placeholder="CPF ou e-mail do gov.br">
+      </div>
+      <div class="field">
+        <label for="f-email">E-mail <span class="req">*</span></label>
+        <input type="email" id="f-email" placeholder="seu@email.com">
+      </div>
+      <div class="field">
+        <label for="f-phone">Telefone / WhatsApp <span class="req">*</span></label>
+        <input type="tel" id="f-phone" placeholder="(11) 99999-9999">
+      </div>
+      <div class="field field-full">
+        <label for="f-prof">Atividade profissional atual</label>
+        <input type="text" id="f-prof" placeholder="Ex.: Analista de TI, Autônomo, Empresário…">
+      </div>
+      <div class="field field-full">
+        <label for="f-addr">Endereço completo e atualizado <span class="req">*</span></label>
+        <textarea id="f-addr" rows="2" placeholder="Rua, número, complemento, bairro, cidade – UF, CEP" style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="padding: 0 18px 6px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text-3);margin-bottom:11px;padding-top:4px;border-top:1px solid var(--border)">Conta bancária para restituição ou débito (se houver)</div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:11px;padding-bottom:16px">
+        <div class="field">
+          <label for="f-banco">Banco <span class="req">*</span></label>
+          <input type="text" id="f-banco" placeholder="Nome do banco">
+        </div>
+        <div class="field">
+          <label for="f-agencia">Agência <span class="req">*</span></label>
+          <input type="text" id="f-agencia" placeholder="0000">
+        </div>
+        <div class="field">
+          <label for="f-conta">Conta / Dígito <span class="req">*</span></label>
+          <input type="text" id="f-conta" placeholder="00000-0">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 1: Declaração Anterior -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">📄</div>
+        <span class="sec-label">1. Declaração Anterior</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Cópia da última DIRPF – Declaração de Imposto de Renda Pessoa Física entregue (se houver)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf" onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo</span> — PDF</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 2: Relacionados à Renda -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">💰</div>
+        <span class="sec-label">2. Relacionados à Renda</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Informe de rendimentos – Instituições financeiras</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — todos os bancos e corretoras</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informe de rendimentos – Aposentadoria, salário, pensão, distribuição de lucros ou pró-labore</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — todos os vínculos empregatícios</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informe de rendimentos – Aluguéis de bens móveis e imóveis</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informes de programas fiscais (Nota Fiscal Paulista / Nota Fiscal Paulistana)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informes de outras rendas recebidas em 2025 (doações, heranças, pensão)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informações do Carnê-Leão para importação na Declaração do Imposto de Renda</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.csv,.txt,.json" onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 3: Rendas Variáveis -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">📈</div>
+        <span class="sec-label">3. Rendas Variáveis</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Informes de rendimentos adquiridos com renda variável</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Notas de corretagem e extratos de IR enviados pelas corretoras</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.xlsx,.csv" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — todas as corretoras</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>DARFs de Renda Variável</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 4: Bens e Direitos -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">🏠</div>
+        <span class="sec-label">4. Bens e Direitos</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Documentos para comprovação da compra e venda de bens e direitos em 2025</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Cópia da matrícula do imóvel, escritura de compra e venda e boleto do IPTU de 2025</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Documentos que provem a posição acionária em uma empresa (se for o caso)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Demonstrativo de Ganhos de Capital 2025 (se houver venda de bens e direitos)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf" onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 5: Dívidas e Ônus -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">📋</div>
+        <span class="sec-label">5. Dívidas e Ônus</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Informes e documentos de dívida e ônus de 2025</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-note">
+      ℹ️ Somente dívidas com valor superior a R$ 5.000,00 precisam ser declaradas. Débitos de financiamento imobiliário, consórcio e atividade rural não precisam ser incluídos.
+    </div>
+  </div>
+
+  <!-- Seção 6: Pagamentos e Deduções -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">🏥</div>
+        <span class="sec-label">6. Pagamentos e Deduções</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Despesas médicas e odontológicas</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — recibos e notas fiscais</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Comprovantes de gastos com educação</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Comprovante de pagamento de previdência social e privada</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — INSS, PGBL, VGBL</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Recibos ou informes de rendimentos de plano ou seguro de saúde</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Comprovante de doações</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seção 7: Dependentes -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-head-left">
+        <div class="sec-icon">👨‍👩‍👧</div>
+        <span class="sec-label">7. Dependentes (se houver)</span>
+      </div>
+    </div>
+    <div class="upload-list">
+      <div class="upload-field">
+        <label>Documentos dos dependentes (CPF, RG ou Certidão de Nascimento)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — um arquivo por dependente</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Comprovantes de gastos com dependentes (saúde, educação, etc.)</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — recibos, notas fiscais e comprovantes</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+      <div class="upload-field">
+        <label>Informe de rendimentos dos dependentes</label>
+        <div class="upload-wrap">
+          <input type="file" accept=".pdf" multiple onchange="showFile(this)">
+          <div class="upload-placeholder">
+            <span class="upload-placeholder-icon">📎</span>
+            <span class="upload-placeholder-text"><span>Escolher arquivo(s)</span> — se aplicável</span>
+          </div>
+          <div class="upload-filename"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enviar -->
+  <div class="submit-area">
+    <div id="submit-error" class="submit-error"></div>
+    <button class="btn-submit" id="btn-submit" onclick="handleSubmit()">
+      Enviar documentos ao contador
+    </button>
+  </div>
+
+  <div id="submit-success" class="submit-success" style="display:none">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Documentos enviados com sucesso!</div>
+    <div class="success-sub">Seu contador já pode acessar os arquivos. Você receberá um retorno em breve.</div>
+    <div class="success-id" id="success-id"></div>
+    <button onclick="resetSubmit()" style="margin-top:16px;padding:10px 24px;background:var(--ok);color:#fff;border:none;border-radius:var(--r-sm);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .2s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+      + Enviar mais documentos
+    </button>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    Portal Fiscal &nbsp;·&nbsp; Documentos para o Contador<br>
+    Acesso restrito &nbsp;·&nbsp; Seus dados são tratados com sigilo
+  </footer>
+
+</div>
+
+<script>
+  /* ── SUPABASE CONFIG ── */
+  var SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+  var SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  var CONTADOR_ID = new URLSearchParams(window.location.search).get('c') || 'geral';
+  var _sb = (SUPABASE_URL !== 'YOUR_SUPABASE_URL')
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  /* ── SUBMIT ── */
+  async function handleSubmit() {
+    var btn      = document.getElementById('btn-submit');
+    var errorEl  = document.getElementById('submit-error');
+    errorEl.textContent = '';
+
+    if (!_sb) {
+      errorEl.textContent = 'Supabase não configurado. Preencha SUPABASE_URL e SUPABASE_ANON_KEY no código.';
+      return;
+    }
+
+    var requiredFields = {
+      'f-name':    'Nome completo',
+      'f-cpf':     'CPF',
+      'f-dob':     'Data de nascimento',
+      'f-email':   'E-mail',
+      'f-phone':   'Telefone / WhatsApp',
+      'f-addr':    'Endereço completo',
+      'f-banco':   'Banco',
+      'f-agencia': 'Agência',
+      'f-conta':   'Conta / Dígito',
+    };
+    var missing = [];
+    var firstMissing = null;
+    Object.keys(requiredFields).forEach(function(id) {
+      var el = document.getElementById(id);
+      if (!el.value.trim()) {
+        el.classList.add('invalid');
+        missing.push(requiredFields[id]);
+        if (!firstMissing) firstMissing = el;
+      } else {
+        el.classList.remove('invalid');
+      }
+    });
+    if (missing.length) {
+      errorEl.textContent = 'Campos obrigatórios não preenchidos: ' + missing.join(', ') + '.';
+      firstMissing.focus();
+      firstMissing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    var nome = document.getElementById('f-name').value.trim();
+    var cpf  = document.getElementById('f-cpf').value.trim();
+
+    btn.disabled    = true;
+    btn.textContent = 'Enviando…';
+
+    try {
+      /* 1. Salva envio */
+      var { data: envio, error: envioErr } = await _sb
+        .from('envios')
+        .insert({
+          contador_id:           CONTADOR_ID,
+          nome:                  nome,
+          cpf:                   cpf,
+          nascimento:            document.getElementById('f-dob').value || null,
+          titulo_eleitor:        document.getElementById('f-titulo').value.trim() || null,
+          govbr:                 document.getElementById('f-govbr').value.trim() || null,
+          email:                 document.getElementById('f-email').value.trim() || null,
+          telefone:              document.getElementById('f-phone').value.trim() || null,
+          atividade_profissional:document.getElementById('f-prof').value.trim() || null,
+          endereco:              document.getElementById('f-addr').value.trim() || null,
+          banco:                 document.getElementById('f-banco').value.trim() || null,
+          agencia:               document.getElementById('f-agencia').value.trim() || null,
+          conta:                 document.getElementById('f-conta').value.trim() || null,
+        })
+        .select('id')
+        .single();
+
+      if (envioErr) throw envioErr;
+      var envioId = envio.id;
+
+      /* 2. Faz upload dos arquivos */
+      var fields = document.querySelectorAll('.upload-field');
+      for (var i = 0; i < fields.length; i++) {
+        var input = fields[i].querySelector('input[type="file"]');
+        var label = fields[i].querySelector('label').textContent.trim();
+        if (!input || !input.files || !input.files.length) continue;
+
+        var slug = label.toLowerCase()
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+
+        for (var j = 0; j < input.files.length; j++) {
+          var file = input.files[j];
+          var ext  = file.name.split('.').pop();
+          var path = CONTADOR_ID + '/' + envioId + '/' + slug + '/' + Date.now() + '-' + j + '.' + ext;
+
+          var { error: upErr } = await _sb.storage.from('documentos').upload(path, file);
+          if (upErr) throw upErr;
+
+          await _sb.from('arquivos').insert({
+            envio_id:     envioId,
+            campo:        label,
+            nome_original:file.name,
+            storage_path: path,
+            tamanho:      file.size,
+          });
+        }
+      }
+
+      /* 3. Sucesso */
+      btn.style.display = 'none';
+      var ok = document.getElementById('submit-success');
+      ok.style.display = 'block';
+      document.getElementById('success-id').textContent = 'Protocolo: ' + envioId;
+      clearAll(); /* limpa só os arquivos; dados do declarante permanecem */
+
+    } catch (err) {
+      console.error(err);
+      errorEl.textContent = 'Erro ao enviar: ' + (err.message || 'tente novamente.');
+      btn.disabled    = false;
+      btn.textContent = 'Enviar documentos ao contador';
+    }
+  }
+
+  /* ── THEME ── */
+  var _theme = localStorage.getItem('pf_theme') ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+  function applyTheme(t) {
+    _theme = t;
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('pf_theme', t);
+    var icon = t === 'dark' ? '☀️' : '🌙';
+    var el = document.getElementById('theme-btn');
+    if (el) el.textContent = icon;
+  }
+
+  applyTheme(_theme);
+
+  document.getElementById('theme-btn').addEventListener('click', function() {
+    applyTheme(_theme === 'dark' ? 'light' : 'dark');
+  });
+
+
+
+  /* ── FILE UPLOAD FEEDBACK ── */
+  function showFile(input) {
+    var wrap = input.closest('.upload-wrap');
+    var filenameEl = wrap.querySelector('.upload-filename');
+    if (input.files && input.files.length > 0) {
+      var names = Array.from(input.files).map(function(f) { return f.name; }).join(', ');
+      filenameEl.innerHTML =
+        '<span class="upload-ok-text">✓ ' + names + '</span>' +
+        '<button class="btn-clear-file" onclick="clearFile(this)" title="Remover arquivo">✕</button>';
+      filenameEl.style.display = 'flex';
+      wrap.style.borderStyle = 'solid';
+      wrap.style.borderColor = 'var(--ok)';
+    } else {
+      filenameEl.innerHTML = '';
+      filenameEl.style.display = 'none';
+      wrap.style.borderStyle = 'dashed';
+      wrap.style.borderColor = '';
+    }
+    updateClearAllBtn();
+  }
+
+  function clearFile(btn) {
+    var wrap = btn.closest('.upload-wrap');
+    var input = wrap.querySelector('input[type="file"]');
+    var filenameEl = wrap.querySelector('.upload-filename');
+    input.value = '';
+    filenameEl.innerHTML = '';
+    filenameEl.style.display = 'none';
+    wrap.style.borderStyle = 'dashed';
+    wrap.style.borderColor = '';
+    updateClearAllBtn();
+  }
+
+  function clearAll() {
+    document.querySelectorAll('.upload-wrap').forEach(function(wrap) {
+      var input = wrap.querySelector('input[type="file"]');
+      var filenameEl = wrap.querySelector('.upload-filename');
+      if (input) input.value = '';
+      if (filenameEl) { filenameEl.innerHTML = ''; filenameEl.style.display = 'none'; }
+      wrap.style.borderStyle = 'dashed';
+      wrap.style.borderColor = '';
+    });
+    updateClearAllBtn();
+  }
+
+  function clearFields() {
+    document.querySelectorAll('.field input, .field textarea').forEach(function(el) {
+      el.value = '';
+      el.classList.remove('invalid');
+    });
+  }
+
+  function resetSubmit() {
+    document.getElementById('submit-success').style.display = 'none';
+    document.getElementById('submit-error').textContent = '';
+    var btn = document.getElementById('btn-submit');
+    btn.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Enviar documentos ao contador';
+    clearAll();
+  }
+
+  function updateClearAllBtn() {
+    var hasFiles = Array.from(document.querySelectorAll('.upload-wrap input[type="file"]'))
+      .some(function(inp) { return inp.files && inp.files.length > 0; });
+    var btn = document.getElementById('btn-clear-all');
+    if (btn) btn.style.display = hasFiles ? '' : 'none';
+  }
+
+  /* ── CPF MASK ── */
+  document.getElementById('f-cpf').addEventListener('input', function(e) {
+    var v = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9)      v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);
+    else if (v.length > 6) v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
+    else if (v.length > 3) v = v.slice(0,3)+'.'+v.slice(3);
+    e.target.value = v;
+  });
+
+  /* ── PHONE MASK ── */
+  document.getElementById('f-phone').addEventListener('input', function(e) {
+    var v = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 6) v = '('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);
+    else if (v.length > 2) v = '('+v.slice(0,2)+') '+v.slice(2);
+    else if (v.length > 0) v = '('+v;
+    e.target.value = v;
+  });
+</script>
+</body>
+</html>
