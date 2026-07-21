@@ -159,13 +159,6 @@
     max-width: 1040px;
   }
 
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    box-shadow: var(--shadow-sm);
-  }
-
   .btn-primary {
     padding: 12px 18px;
     background: var(--primary);
