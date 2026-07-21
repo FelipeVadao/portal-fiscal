@@ -4,106 +4,188 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-Portal Fiscal — plataforma multi-contador e multi-cliente para envio de documentos fiscais (IRPF). Qualquer contador cadastrado recebe um link único para seus clientes; os clientes preenchem o formulário e fazem upload dos documentos; o contador acessa o dashboard para visualizar e baixar os arquivos.
+Portal Fiscal — plataforma multi-contador e multi-cliente para envio de documentos fiscais (IRPF). Qualquer contador cadastrado recebe um link único para seus clientes; o contador cadastra clientes e pode solicitar documentos específicos; o cliente loga com CPF + código de acesso, acompanha o progresso e envia os documentos pedidos (ou outros, avulsos); o contador acessa o dashboard para gerenciar solicitações e ver/baixar os arquivos.
+
+**Migração para Next.js/TypeScript concluída** — ver `supabase/migrations/README.md` para o estado exato de cada leva de migrations. Este documento reflete o estado após: Sub-fase 0 (segurança) + paridade do dashboard + CRUD de clientes/login do cliente + Solicitações de documentos + portal do cliente novo + migração de `registro.html`. Não sobra mais nenhum HTML estático falando direto com o Supabase — tudo passa por API routes.
 
 ## Deployment
 
-**URL de produção:** https://portal-fiscal-wine.vercel.app  
-**Hospedagem:** Vercel
+**URL de produção:** https://portal-fiscal-wine.vercel.app
+**Hospedagem:** Vercel — build Next.js real (`vercel.json` = `{"framework":"nextjs", "crons": [...]}`), deploy via push/CI ou `npx vercel --prod`.
 
-**Publicar atualização:**
-```
-npx vercel --prod
-```
+**Variáveis de ambiente exigidas** (ver `.env.example`):
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — server-side only, nunca expostas ao browser.
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — usadas só pelo componente de upload no navegador (`lib/supabase/browser.ts`), para `uploadToSignedUrl` direto no Storage (contorna o limite de 4.5MB de payload das Vercel Functions). A anon key é segura para expor — a proteção real é o token de upload de curta duração + RLS.
+- `SESSION_SECRET` (mín. 32 caracteres) — cookies de sessão via `iron-session`.
+- `CONTADOR_INVITE_CODE` — código exigido em `/registro`.
+- `DATABASE_URL` — connection string Postgres (pooler), só usada por `scripts/run-migration.mjs` para aplicar migrations. Não é lida pela aplicação em si.
+- `RESEND_API_KEY` — server-side only, usada por `lib/email/resend.ts` para enviar e-mails de notificação.
+- `EMAIL_FROM` (opcional, default `Portal Fiscal <onboarding@resend.dev>`) — remetente dos e-mails. **Sem domínio verificado no Resend, só entrega pro e-mail da própria conta Resend** (limitação deles, não é uma escolha nossa) — trocar assim que um domínio for verificado, ver seção "Notificações por e-mail" abaixo.
+- `APP_URL` (opcional, default a URL de produção acima) — usada só server-side pra montar os links dentro dos e-mails.
+- `CRON_SECRET` — segredo que o Vercel manda automaticamente como `Authorization: Bearer <valor>` ao chamar rotas de cron; `/api/cron/prazos` rejeita qualquer chamada sem esse header batendo.
+- `GEMINI_API_KEY` — server-side only, usada por `lib/ai/validarDocumento.ts` (Google AI Studio, tier gratuito) para conferir se o arquivo enviado bate com o tipo de documento pedido. Sem essa variável, a verificação é pulada silenciosamente (best-effort).
+- `GEMINI_MODEL` (opcional, default `gemini-flash-latest`) — o alias "sempre atual" da Google; evita que o app quebre quando um modelo específico é descontinuado (já aconteceu uma vez em teste: `gemini-2.5-flash` parou de aceitar contas novas de um dia pro outro).
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — par de chaves para Web Push, gerado localmente (`node -e "console.log(require('web-push').generateVAPIDKeys())"`), sem cadastro em provedor nenhum. Trocar invalida todas as inscrições de push já salvas.
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — a mesma chave pública acima, exposta ao navegador (é pública por natureza, como a anon key do Supabase).
 
 ## Architecture
 
-Três arquivos HTML independentes — cada um é uma SPA com CSS + JS inline:
-
-- `index.html` — Portal do cliente. Formulário de dados + 7 seções de upload. Envia para Supabase ao clicar em "Enviar".
-- `dashboard.html` — Dashboard do contador. Login com senha, visualização de envios agrupados por cliente, download de arquivos, exclusão individual ou em massa.
-- `registro.html` — Cadastro de novo contador. Protegido por `CODIGO_CONVITE` hardcoded. Cria registro na tabela `contadores`.
-- `server.js` — servidor Express local; não vai para produção (`.vercelignore`).
-- `fonts/` — Inter woff2 (400, 600, 700).
+- `app/page.tsx` — **Portal do cliente**, migrado para Next.js/TypeScript. Login via CPF + código de acesso (`ClienteLoginForm`), depois `PortalShell`: progresso geral, lista de solicitações pendentes com upload por solicitação (`SolicitacoesList`/`UploadField`), e uma seção de upload genérico sem solicitação vinculada (`GenericUploadSection`, mantida como fallback).
+- `app/dashboard/` — Dashboard do contador. `DashboardShell.tsx` é o shell: header sticky em vidro + navegação por abas (`Envios`/`Clientes`/`Prazos`/`Gráficos`/`Histórico`/`Busca`, troca de aba é só estado local, sem rota própria por aba). "Envios" (`EnviosPanel` → `StatsGrid` + `ClientCard` por cliente, expansível → `EnvioSub` por envio, expansível → `FileRow` por arquivo — 3 níveis de accordion aninhados, cada um com seu próprio estado `open`), "Clientes" (`ClientesPanel`: CRUD de clientes, cada linha com avatar de iniciais (`components/ui/Avatar.tsx`) e barra de progresso inline; ao expandir um cliente, `RequestsPanel` para criar/gerenciar solicitações), "Prazos" (`PrazosPanel`: solicitações com `data_limite` ainda não concluídas, agrupadas em Vencidos/Próximos 7 dias/Depois, com troca de status inline), "Gráficos" (`GraficosPanel`: distribuição de solicitações por status + volume diário de arquivos recebidos nos últimos 14 dias, gráficos custom em CSS/SVG sem dependência nova), "Histórico" (`HistoricoPanel`: timeline de eventos de auditoria, com filtro por cliente e paginação por cursor) e "Busca" (`BuscaPanel`: busca com debounce por clientes/solicitações/arquivos, `GET /api/busca`).
+- `app/registro/page.tsx` + `components/registro/RegistroForm.tsx` — Cadastro de novo contador (React/Tailwind, migrado do `public/registro.html` estático original). Mesmo fluxo de sempre: `RegistroForm` (`"use client"`) faz `fetch('/api/contadores')`, sem Supabase JS no bundle. `/registro.html` redireciona pra `/registro` (`next.config.ts`, mesmo padrão de `/dashboard.html`→`/dashboard`).
+- `app/api/**/route.ts` — API routes server-side. Toda leitura/escrita sensível passa por aqui usando a **service role key**. Exceção deliberada: upload de arquivo (browser → Storage direto via signed URL, ver acima). `GET /api/solicitacoes` tem dois modos pra sessão de contador: com `clienteId`, retorna só as solicitações daquele cliente com os arquivos embutidos (uso original, `RequestsPanel`); sem `clienteId`, retorna **todas** as solicitações do contador com o nome do cliente embutido (`clientes(nome)`, sem arquivos — a listagem global não precisa deles) — usado pelo painel de Prazos. `GET /api/clientes` embute `progresso` (via `calcularProgresso()`) em cada cliente, calculado a partir das solicitações dele — alimenta a barra inline em `ClientesPanel` sem uma requisição extra por cliente. `GET /api/busca?q=` roda 3 queries em paralelo (clientes, solicitações, arquivos), todas escopadas por `contador_id` — a de clientes casa CPF tanto com pontuação quanto sem (normaliza o termo pra dígitos e casa contra a coluna, que já é gravada só em dígitos); a de arquivos filtra via `envios!inner(contador_id)` já que `arquivos` não tem `contador_id` direto. O termo é sanitizado (remove `, ( ) % *`) antes de entrar no `.or()` do PostgREST — evita quebrar a sintaxe do filtro, não é proteção de SQL injection (o client do Supabase já parametriza os valores).
+- `lib/supabase/server.ts` — cliente Supabase admin (service role), só server-side (`server-only`). `lib/supabase/browser.ts` — cliente anon key, só para upload, roda no navegador.
+- `lib/auth/` — hash de senha/código de acesso (bcrypt), sessão (`iron-session`): `pf_contador_session` e `pf_cliente_session`.
+- `lib/solicitacoes/progress.ts` — cálculo de progresso (% de solicitações já enviadas pelo cliente).
+- `lib/solicitacoes/prazos.ts` — classifica um `data_limite` em urgência (`vencido`/`hoje`/`proximo`/`distante`, corte em 7 dias) + label legível, para o painel de Prazos.
+- `lib/estatisticas/arquivosPorDia.ts` — agrupa `arquivos.created_at` em baldes diários (últimos N dias, zero-preenchidos), para o gráfico de volume do painel de Gráficos. O breakdown por status reaproveita `calcularProgresso()` (mesma função do painel de progresso do cliente) aplicado a todas as solicitações do contador de uma vez.
+- `lib/format/avatar.ts` — iniciais + cor determinística (hash do `id` do cliente sobre uma paleta fixa de 8 cores, deliberadamente fora dos tons reservados de status/`--primary`) para `components/ui/Avatar.tsx`, usado em `ClientesPanel`.
+- `lib/eventos/log.ts` — grava eventos de auditoria (`eventos`), best-effort (nunca lança, só loga erro no console). Chamado a partir de toda mutação relevante: criação/remoção de cliente, reset de código de acesso, login de cliente, criação/remoção de solicitação, alteração de status, upload de arquivo (via RPC), notificação de prazo (via cron). `lib/eventos/format.ts` converte um evento bruto em ícone + texto legível pra timeline — cada tipo de evento lê sua própria `metadata` isoladamente (o campo `nome`, por exemplo, significa "nome do cliente" num tipo de evento e "nome da solicitação" em outro).
+- `lib/email/` — notificações por e-mail (Resend). `resend.ts` expõe o client lazy-singleton + `getEmailFrom()`/`getAppUrl()`; `send.ts` (`sendEmail()`) é best-effort igual a `logEvento()` — nunca lança, só loga erro; `templates.ts` gera o HTML inline-styled dos e-mails (sem lib de template nova). Dois gatilhos: `POST /api/solicitacoes` manda "novo documento solicitado" pro cliente na hora (se ele tiver e-mail cadastrado); `app/api/cron/prazos/route.ts`, chamado 1x/dia pelo Vercel Cron (`vercel.json`), manda "prazo próximo" pra solicitações com `data_limite` hoje/amanhã (ou já vencido, se o cron ficou fora do ar) que ainda não foram lembradas — `solicitacoes.lembrete_enviado_em` (migration 0012) marca isso pra nunca mandar duas vezes. A rota de cron exige o header `Authorization: Bearer $CRON_SECRET` (o Vercel manda isso automaticamente quando `CRON_SECRET` está configurado nas env vars do projeto).
+- `lib/ai/` — verificação automática de documento (Gemini, tier gratuito). `gemini.ts` expõe o client lazy-singleton + `getGeminiModel()`. `validarDocumento.ts` baixa o arquivo do Storage (admin client), monta um prompt com o nome/categoria/descrição da solicitação e manda pro Gemini (inline base64 pra pdf/jpg/jpeg/png, texto puro pra csv/txt/json — `xlsx` não é suportado, vira `nao_verificado`) pedindo um JSON `{compativel, motivo}`; tem uma retentativa única pra erros transitórios (429/503 — o tier gratuito devolve isso com alguma frequência sob alta demanda). Best-effort igual a `sendEmail()`/`logEvento()`: nunca lança, qualquer falha vira status `"erro"`. Disparada de `POST /api/arquivos` via `after()` do Next.js — roda **depois** da resposta ser enviada ao cliente, então o upload não fica esperando a chamada à IA. Resultado grava em `arquivos.ia_validacao`/`ia_observacao` (migration 0013) e aparece como badge em `FileRow` (⚠️ suspeito / ✓ compatível — `nao_verificado`/`erro`/`null` não mostram nada, pra não poluir a UI com incerteza). Quando o resultado é `"suspeito"`, loga um evento `arquivo_suspeito_ia` (aparece no Histórico).
+- `lib/push/` — push notifications do navegador (Web Push padrão, sem provedor pago — VAPID + o serviço de push do próprio browser). `webpush.ts` configura o client `web-push` (lazy, uma vez por processo). `send.ts` (`sendPushToCliente()`) manda pra todas as inscrições de um cliente (pode ter mais de uma — um por navegador/dispositivo), best-effort igual a `sendEmail()`; uma inscrição que responde 404/410 (expirada/revogada) é removida do banco automaticamente. `browser.ts` (`"use client"`) só tem o helper de conversão da chave pública VAPID (base64url → `Uint8Array`) usado pelo componente. `components/portal/PushNotificationToggle.tsx` é o botão no header do portal do cliente: registra `public/sw.js`, pede permissão, assina via `PushManager`, e salva/remove a inscrição via `POST`/`DELETE /api/push/subscribe` (`push_subscriptions`, migration 0014). Mesmos dois gatilhos do e-mail (nova solicitação, prazo próximo) — rodam em paralelo, um cliente pode receber pelos dois canais se tiver os dois ativados. `public/sw.js` é o service worker mínimo: mostra a notificação no evento `push` e foca/abre o portal no `notificationclick`.
+- `components/dashboard/`, `components/portal/`, `components/ui/` — componentes React reutilizáveis. `components/ui/icons.tsx` é o conjunto de ícones SVG inline compartilhado (estilo Feather: `stroke`, `viewBox 0 0 24 24`) que substituiu todos os emojis usados como ícone de UI no app (📎🔑⬇💬🔔🔕📄🖼✓⚠️👤🗑️🔓📋🔄📧 etc.) — cada ícone é um componente nomeado (`IconKey`, `IconDownload`, ...) recebendo só `className` (tamanho/cor via Tailwind, ex. `"size-4 text-text-2"`). `lib/eventos/format.ts` não retorna mais o emoji em si, retorna uma *chave* (`EventoIconeChave`, ex. `"user"`/`"trash"`/`"refresh-cw"`); `HistoricoPanel.tsx` tem o mapa chave→componente. `components/shared/` — componentes usados tanto pelo dashboard quanto pelo portal do cliente (ex.: `ComentariosThread`, que renderiza a mesma thread dos dois lados; quem é "Você" na UI depende só da prop `viewerTipo`, a permissão real vem da sessão checada no servidor).
+- `supabase/migrations/` — migrations SQL versionadas. `scripts/run-migration.mjs` aplica direto via `DATABASE_URL` (ver README da pasta).
+- `fonts/` — Inter woff2, consumida via `next/font/local` (`app/fonts.ts`).
 
 ## Multi-contador
 
-O parâmetro `?c=ID` na URL determina qual contador está sendo referenciado:
+O parâmetro `?c=ID` na URL determina qual contador está sendo referenciado — mecanismo inalterado:
 
 | Quem | URL |
 |---|---|
-| Cliente envia documentos | `portal-fiscal-wine.vercel.app?c=diego` |
-| Contador acessa o dashboard | `portal-fiscal-wine.vercel.app/dashboard.html?c=diego` |
-| Novo contador se cadastra | `portal-fiscal-wine.vercel.app/registro.html` |
+| Cliente acessa o portal | `portal-fiscal-wine.vercel.app?c=diego` |
+| Contador acessa o dashboard | `portal-fiscal-wine.vercel.app/dashboard?c=diego` |
+| Novo contador se cadastra | `portal-fiscal-wine.vercel.app/registro` |
 
-O portal abre direto sem senha. O dashboard exige a senha definida no cadastro. O link com `?c=` é o próprio controle de acesso do portal.
+`/dashboard.html`, `/index.html` e `/registro.html` redirecionam para as rotas novas (`/dashboard`, `/` e `/registro`).
 
 ## Supabase
 
-**Projeto:** `mxebpznsuekwxquqajfk.supabase.co`  
-**Credenciais:** `SUPABASE_URL` e `SUPABASE_ANON_KEY` hardcoded no topo do `<script>` de cada arquivo.
+**Projeto:** `mxebpznsuekwxquqajfk.supabase.co`
+**Credenciais:** só em variáveis de ambiente. `SUPABASE_SERVICE_ROLE_KEY` nunca sai do servidor; `NEXT_PUBLIC_SUPABASE_ANON_KEY` é a única que chega ao browser, e só para o upload via signed URL.
 
 ### Tabelas
 
 ```
-contadores   id (text PK), nome, senha, codigo_acesso
-envios       id (uuid PK), contador_id, nome, cpf, nascimento, titulo_eleitor,
-             govbr, email, telefone, atividade_profissional, endereco,
-             banco, agencia, conta, created_at
-arquivos     id (uuid PK), envio_id (FK→envios), campo, nome_original,
-             storage_path, tamanho, created_at
+contadores    id (text PK), nome, senha (legado, nullable — novas contas
+              não gravam mais isso), senha_hash (bcrypt), codigo_acesso
+              (legado, morto)
+clientes      id (uuid PK), contador_id (FK→contadores), nome, cpf,
+              codigo_acesso_hash (bcrypt), email, telefone,
+              created_at, updated_at — unique(contador_id, cpf)
+solicitacoes  id (uuid PK), contador_id (FK), cliente_id (FK→clientes),
+              nome, descricao, categoria, obrigatoria, data_limite,
+              status (enum: pendente/enviado/em_analise/aprovado/rejeitado),
+              created_at, updated_at
+envios        id (uuid PK), contador_id, cliente_id (FK→clientes, nullable),
+              nome, cpf, nascimento, titulo_eleitor, govbr, email, telefone,
+              atividade_profissional, endereco, banco, agencia, conta,
+              created_at — só contador_id é NOT NULL
+arquivos      id (uuid PK), envio_id (FK→envios), solicitacao_id
+              (FK→solicitacoes, nullable), campo, nome_original,
+              storage_path, tamanho, created_at
+eventos       id (uuid PK), contador_id, cliente_id, solicitacao_id,
+              envio_id, arquivo_id (todos nullable exceto contador_id),
+              tipo, ator_tipo (contador/cliente/sistema), ator_id,
+              metadata jsonb, created_at — log de auditoria, exibido no
+              dashboard (aba "Histórico") via GET /api/eventos
+comentarios   id (uuid PK), contador_id (FK, cascade), solicitacao_id
+              (FK→solicitacoes, cascade), autor_tipo (contador/cliente),
+              autor_id, texto, created_at — thread de conversa por
+              solicitação, visível dos dois lados (dashboard e portal)
 ```
 
-Storage bucket: `documentos` (privado). Paths: `{contador_id}/{envio_id}/{campo_slug}/{filename}`.
+`eventos.cliente_id`/`solicitacao_id` são `ON DELETE SET NULL` — ao remover um cliente ou solicitação, **todo** o histórico antigo daquela entidade perde o vínculo (não só o evento de remoção). Por isso os eventos de criação/remoção gravam o nome em `metadata.nome` como fallback (ver `lib/eventos/format.ts`); eventos que não têm esse fallback (ex: `solicitacao_status_alterado` de uma solicitação já removida) mostram um texto genérico em vez do nome.
 
-### RLS policies necessárias
+Function `registrar_arquivo_enviado(...)` (RPC, `security definer`, só `service_role`): grava o arquivo, atualiza o status da solicitação pra `enviado` (se houver) e loga o evento — tudo numa transação só.
 
-`anon`: SELECT/INSERT em `contadores`, `envios`, `arquivos`; INSERT/SELECT/DELETE em `storage.objects` (bucket `documentos`); DELETE em `envios`.
+Storage bucket: `documentos` (privado). Paths: `{contador_id}/{envio_id}/{campo_slug}/{arquivo}`.
 
-## Autenticação (sessionStorage)
+**Importante:** `envios.contador_id` **não tem FK real** para `contadores.id` (é assim desde a criação original da tabela) — apagar um contador não apaga os envios dele em cascata. Só `clientes`/`solicitacoes` têm `ON DELETE CASCADE` de verdade a partir de `contadores`/`clientes`. Ao remover um contador manualmente, apague `envios`/`arquivos` (com os arquivos do Storage) explicitamente primeiro.
 
-- Portal cliente: sem autenticação
-- Dashboard: `sessionStorage.getItem('dash_' + CONTADOR_ID) === '1'`
-- Código de convite do registro: `CODIGO_CONVITE = '200396'` em `registro.html`
+### RLS
+
+**Nenhuma tabela tem mais leitura/escrita real liberada para `anon`.** `contadores`/`clientes`/`solicitacoes`/`eventos`/`envios`/`arquivos`/`comentarios`: deny-by-default, só `service_role` (via API routes). `storage.objects` (bucket `documentos`): mesma coisa — o upload funciona sem policy de `anon` porque `uploadToSignedUrl` é autorizado pelo token de curta duração gerado em `/api/arquivos/signed-upload-url`, não por RLS (confirmado empiricamente: dados reais ficam invisíveis pra anon key, e o upload continua funcionando). Sobra só uma policy de `INSERT` morta em `contadores` (nenhum código a usa mais desde a migração de `registro.html`) — candidata a remover numa limpeza futura.
+
+## Autenticação
+
+- **Portal cliente**: cookie httpOnly `pf_cliente_session`, CPF + código de acesso (bcrypt), verificado server-side (`app/page.tsx` + `requireClienteSession()`).
+- **Dashboard**: cookie httpOnly `pf_contador_session`, verificado server-side (`app/dashboard/page.tsx` + `requireContadorSession()`).
+- **Código de acesso do cliente**: gerado pelo contador na aba "Clientes" (`ClientCreateForm`), 8 caracteres, exibido em texto puro só na criação/reset (`CodigoAcessoReveal`) — depois só existe como hash; esquecer = gerar um novo.
+- **Código de convite do registro**: `CONTADOR_INVITE_CODE`, checado server-side em `/api/contadores` — nunca chega ao bundle do cliente (antes era visível via view-source).
+
+## Fluxo de upload (por que é diferente de uma API route comum)
+
+Vercel Functions têm limite de 4.5MB por requisição — documentos fiscais escaneados podem passar disso. Por isso o upload não passa pelo servidor Next.js: o navegador pede uma signed upload URL (`POST /api/arquivos/signed-upload-url`, valida posse/extensão, usa a service role key), faz o upload direto pro Supabase Storage com essa URL (`lib/supabase/browser.ts`, `uploadToSignedUrl`), e só então registra os metadados (`POST /api/arquivos`, chama a RPC `registrar_arquivo_enviado`).
 
 ## Design System
 
-CSS custom properties — tema claro (`:root`) e escuro (`[data-theme="dark"]`). Tema aplicado no `<head>` via script inline (evita flash). Toggle persiste em `localStorage` (`pf_theme`).
+**Tailwind CSS v4** (setup CSS-first, sem `tailwind.config.ts` — tudo via `@theme`/`@theme inline` em `app/globals.css`). Os tokens legados (`--bg`, `--surface`, `--primary`, `--text-2` etc., ainda em `:root`/`[data-theme="dark"]`) são a fonte de verdade e são "pontes" pro Tailwind via `@theme inline` (`--color-bg: var(--bg)` etc.) — dá pra usar `bg-surface`, `text-text-2`, `rounded-card` etc. direto no JSX, e o toggle de tema (`data-theme`) continua funcionando sem nenhuma mudança no script de pré-hidratação. `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *))` liga o variant `dark:` do Tailwind ao mesmo atributo. Três `@utility` novas: `glass-card` (superfície translúcida + `backdrop-filter: blur`), `glow-orb` (usado por `components/ui/GlowBackground.tsx`, montado uma vez em `app/layout.tsx`), `text-gradient` (texto em gradiente `primary`→violeta). Classes globais legadas (`.wrap`, `.card`, `.btn-primary`, `.btn-icon`, `.btn-danger-sm`, `.badge*`) continuam existindo em `app/globals.css` pros componentes ainda não convertidos — mesma paleta nova por trás, sem quebrar nada; removidas só num incremento final de limpeza, depois que nada mais as referenciar.
 
-Tokens principais: `--bg`, `--surface`, `--surface-2`, `--border`, `--primary`, `--text`, `--text-2`, `--text-3`, `--ok`, `--pend`, `--r`, `--r-sm`, `--t`.
+**Todo o app já está convertido pra Tailwind** (CSS Modules removidos de `components/` por completo): os 5 primitivos de `components/ui/`, as 5 telas do portal do cliente, e as 12 telas/componentes do dashboard (`DashboardShell`, `ClientesPanel`/`RequestsPanel`/`FileRow`, `EnviosPanel`/`ClientCard`/`EnvioSub`/`StatsGrid`, `ClientCreateForm`/`RequestForm`/`CodigoAcessoReveal`, `PrazosPanel`, `HistoricoPanel`, `BuscaPanel`, `GraficosPanel`) + `ComentariosThread` (`components/shared/`) + `PushNotificationToggle` + o `/registro` novo. Único lugar que ainda usa as classes globais legadas por design (não por estarem pendentes): botões/badges compartilhados (`btn-primary`, `btn-icon`, `btn-danger-sm`, `badge*`) que continuam como classes reaproveitáveis em `app/globals.css`, e `.wrap`/`.wrap--wide` como container de largura. Removidas só num incremento final de limpeza, se um dia nada mais as referenciar.
 
-## Padrão para campo de upload
+**Bug de fundação pego durante essa leva, com efeito em cascata no app inteiro:** o bloco de reset em `app/globals.css` (`*, *::before, *::after { margin: 0; padding: 0; ... }`) não estava dentro de nenhum `@layer` — por spec de CSS Cascade Layers, uma regra "sem camada" tem prioridade automática sobre **qualquer** regra em `@layer` nomeada, `utilities` do Tailwind incluída, não importa a especificidade. Na prática, isso zerava silenciosamente todo `p-*`/`m-*`/`gap-*` aplicado via Tailwind em qualquer elemento — só não era óbvio porque `gap-*` (flex/grid gap) não é afetado por reset de margin/padding, e cards/glass-card ainda tinham chrome visual (borda/sombra/blur) mesmo com padding zerado, mascarando o problema em screenshots rápidos. Corrigido envolvendo o reset em `@layer base` e as classes globais legadas (`.card`, `.btn-*`, `.badge*`, `.wrap`) em `@layer components` — a mesma convenção que o próprio Preflight do Tailwind usa, e que garante que qualquer utility do Tailwind sempre ganha de uma classe legada combinada na mesma tag. Pego por inspeção de `getComputedStyle` (padding/margin computavam `0px` num nav que claramente tinha classes `py-2.5`/`mr-5` no DOM) durante a verificação visual desta leva — reaplicar esse diagnóstico (`getComputedStyle` + procurar `@layer` ausente) se algum espaçamento Tailwind "não aplicar" de novo no futuro.
 
-```html
-<div class="upload-field">
-  <label>Nome do Documento</label>
-  <div class="upload-wrap">
-    <input type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="showFile(this)">
-    <div class="upload-placeholder">
-      <span class="upload-placeholder-icon">📎</span>
-      <span class="upload-placeholder-text"><span>Escolher arquivo</span> — descrição curta</span>
-    </div>
-    <div class="upload-filename"></div>
-  </div>
-</div>
-```
+## Rodando migrations
 
-Para múltiplos arquivos: adicionar `multiple` ao `<input>`.
+`scripts/run-migration.mjs` aplica arquivos `.sql` direto via `DATABASE_URL` (connection string Postgres — pegar em **Connect** no topo do dashboard do projeto, aba Session/Transaction pooler, não Settings > Database, e não a "Direct connection", que é IPv6-only). Ver `supabase/migrations/README.md` para a ordem e o status de cada leva.
 
-## Seções de upload (index.html)
+## Ambiente
 
-1. **Declaração Anterior** — Cópia da última DIRPF (se houver)
-2. **Relacionados à Renda** — Instituições financeiras; salário/aposentadoria/pró-labore; aluguéis; programas fiscais; outras rendas; Carnê-Leão
-3. **Rendas Variáveis** — Informes de renda variável; notas de corretagem; DARFs
-4. **Bens e Direitos** — Comprovação de compra/venda; matrícula + escritura + IPTU; posição acionária; Demonstrativo de Ganhos de Capital
-5. **Dívidas e Ônus** — Documentos de dívida > R$ 5.000 (financiamento imobiliário e consórcio não precisam)
-6. **Pagamentos e Deduções** — Médico/odontológico; educação; previdência; plano de saúde; doações
-7. **Dependentes** — Documentos (CPF/RG/certidão); gastos; informes de rendimentos
-
-## Campos obrigatórios no formulário
-
-Nome completo, CPF, Data de nascimento, E-mail, Telefone/WhatsApp, Endereço completo, Banco, Agência, Conta/Dígito. Validados em `handleSubmit()` com destaque visual (borda vermelha + scroll até o primeiro campo vazio).
+**Existe um único projeto Supabase** (`mxebpznsuekwxquqajfk`) — não há staging/produção separados. `.env.local` (usado por `npm run dev`) e `.env.production.local` (usado por scripts) apontam pro mesmo banco; só o `SESSION_SECRET` costuma diferir entre os dois. Isso significa: qualquer migration só precisa rodar uma vez, e testar localmente já testa contra o banco real. Redobrar o cuidado com operações destrutivas — não há um ambiente descartável de verdade pra experimentar.
 
 ## Status atual
 
-Última atualização: 31/05/2026
+**Fase 1 do plano concluída por completo**: Sub-fase 0 (segurança), paridade do dashboard, CRUD de clientes/login do cliente, Solicitações de documentos + portal do cliente novo (`app/page.tsx`), migração de `registro.html` para `/api/contadores`, e lockdown final de RLS (`envios`/`arquivos`/`storage.objects`). Migrations 0001→0010 todas aplicadas e testadas ponta a ponta, incluindo verificação ativa de que `anon` não lê mais nada além do que é servido via API routes ou signed URL.
+
+**Conta de demonstração no banco:** `demo` (senha `Demo1234`), com um cliente (`Cliente Demo`, CPF `529.982.247-25`, código de acesso `8TYTQCS4`), 3 solicitações com status variados e 1 arquivo de exemplo (`holerite_junho.pdf`, sem arquivo real no Storage por trás — só a linha no banco, pra Busca/Envios terem o que mostrar) — criada deliberadamente para o usuário revisar as features no navegador (`/dashboard?c=demo` e `/?c=demo`) e mantida no ar (não é limpa como os demais dados de teste). Toda conta com prefixo `teste-*` é descartável e já foi removida ao final de cada rodada de testes.
+
+**Fase 2, entregas concluídas: Histórico/Timeline, Painel de Prazos, Gráficos, Comentários em documentos, organização visual de clientes, Busca avançada, Notificações por e-mail, Verificação automática de documento por IA e Push notifications.**
+
+- **Histórico/Timeline**: a tabela `eventos` (que já gravava desde a Fase 1) tem UI: aba "Histórico" no dashboard (`HistoricoPanel`), com filtro por cliente e paginação por cursor (`GET /api/eventos`). Cobertura de eventos ampliada nesta entrega — além de `solicitacao_criada`/`solicitacao_status_alterado`/`arquivo_enviado` (Fase 1), agora também: `cliente_criado`, `cliente_removido`, `codigo_acesso_resetado`, `solicitacao_removida`, `cliente_login`.
+- **Painel de Prazos**: aba "Prazos" (`PrazosPanel`) — solicitações com `data_limite` definida e ainda não concluídas (`status` diferente de `aprovado`/`rejeitado`), agrupadas em Vencidos/Próximos 7 dias/Depois (`lib/solicitacoes/prazos.ts`), com badge de urgência e troca de status inline sem sair da aba.
+- **Gráficos**: aba "Gráficos" (`GraficosPanel`, `GET /api/estatisticas`) — 2 stat tiles (total de solicitações, taxa de conclusão) + gráfico de barras por status (cores reaproveitadas do `StatusBadge`, já validadas em produção) + gráfico de volume de arquivos recebidos nos últimos 14 dias. Implementado em CSS/SVG puro (sem lib de charts nova), seguindo a skill `dataviz`: marks finas com ponta arredondada, rótulo direto só no extremo (evita poluir o gráfico de 14 colunas), tooltip por hover/foco em todo mark, testado em claro e escuro.
+- **Comentários em documentos**: thread de conversa por solicitação (tabela `comentarios`, migration 0011), visível e escrevível dos dois lados — botão "💬 Comentários" em `RequestsPanel` (dashboard) e em `SolicitacoesList` (portal do cliente), ambos renderizando o mesmo `components/shared/ComentariosThread`. `GET`/`POST /api/solicitacoes/[id]/comentarios` inferem o autor pela sessão (contador ou cliente) e checam posse da solicitação antes de ler/escrever — nunca confiam num "sou eu" vindo do cliente. Cada comentário novo também loga um evento (`comentario_criado`), então aparece no Histórico.
+- **Organização visual de clientes**: cada linha em `ClientesPanel` agora mostra um avatar de iniciais com cor determinística (`components/ui/Avatar.tsx`, `lib/format/avatar.ts`) e, quando o cliente já tem alguma solicitação, uma barra de progresso inline — sem precisar expandir a linha pra saber o andamento. `GET /api/clientes` calcula esse progresso por cliente no servidor.
+- **Busca avançada**: aba "Busca" (`BuscaPanel`, `GET /api/busca`) — busca com debounce (300ms) por clientes (nome/CPF/e-mail), solicitações (nome/descrição/categoria) e arquivos (nome do arquivo), cada categoria numa seção própria. CPF casa com ou sem pontuação. Limitação conhecida, não corrigida (custo desproporcional pro ganho agora): a busca é `ilike` puro, então é sensível a acento — buscar "joao" não acha "João". Corrigir exigiria a extensão `unaccent` do Postgres + uma function/RPC (o filtro embutido do PostgREST não chama funções SQL sobre colunas).
+- **Notificações por e-mail** (`lib/email/`, provedor Resend): dois gatilhos — nova solicitação criada (síncrono, em `POST /api/solicitacoes`) e prazo próximo (`app/api/cron/prazos`, 1x/dia via Vercel Cron às 12h UTC = 9h em Brasília). Só dispara se o cliente tiver e-mail cadastrado (campo continua opcional). Cada envio é best-effort — nunca derruba a operação principal se o Resend falhar. **Rodando hoje em modo de teste**: sem domínio verificado no Resend, `EMAIL_FROM` usa `onboarding@resend.dev`, que só entrega pro e-mail da própria conta Resend, não pra clientes de verdade — pra produção, verificar um domínio próprio no Resend (Dashboard > Domains, adicionar os registros DNS que eles pedem) e trocar `EMAIL_FROM` pra usar esse domínio.
+- **Verificação automática de documento por IA** (`lib/ai/`, provedor Gemini, tier gratuito): ao subir um arquivo pra uma solicitação específica, o Gemini confere se o TIPO do documento bate com o pedido (ex.: sinaliza se alguém sobe uma lista de compras num campo que pedia comprovante de residência) — não avalia se o conteúdo está correto/completo, só o tipo. Roda em background via `after()` (não atrasa a resposta do upload), best-effort (nunca bloqueia o upload), com uma retentativa pra erros transitórios do tier gratuito (429/503). Resultado vira um badge em cada arquivo no dashboard (⚠️ suspeito / ✓ compatível) e, quando suspeito, um evento no Histórico. Migration 0013 (`arquivos.ia_validacao`/`ia_observacao`). Suporta pdf/jpg/jpeg/png (multimodal) e csv/txt/json (texto puro); `xlsx` e arquivos >12MB não são verificados (`nao_verificado`).
+- **Push notifications** (`lib/push/`, Web Push padrão — sem provedor pago, ao contrário de WhatsApp, que ficou de fora por exigir conta comercial verificada + cota paga da Meta): mesmos dois gatilhos do e-mail (nova solicitação, prazo se aproximando), rodando em paralelo com ele — um cliente pode ter os dois ativados. Botão "🔔/🔕" no header do portal do cliente (`PushNotificationToggle`), registra `public/sw.js`, pede permissão do navegador e assina via `PushManager`. Inscrições ficam em `push_subscriptions` (migration 0014, um cliente pode ter várias — uma por navegador/dispositivo); uma inscrição expirada (404/410 do serviço de push) é removida automaticamente no próximo envio. Não tem UI de teste com clique — só funciona com o navegador realmente aceitando a permissão.
+
+Todas testadas ponta a ponta via API + Playwright, incluindo casos de borda (cliente/solicitação removido depois do evento no Histórico; solicitação aprovada some do Painel de Prazos em tempo real; contagem diária correta nos Gráficos com dados de teste com `created_at` retroativo; troca de comentários nos dois sentidos com sessões separadas, confirmação de 401 sem sessão, busca com termo contendo vírgula/parênteses sem quebrar, criação de solicitação com falha de envio de e-mail não bloqueando a resposta, e o cron de prazos não reprocessando a mesma solicitação numa segunda chamada).
+
+**Bugs corrigidos nesta leva (Histórico/Prazos/Gráficos/Comentários) e na revisão em seguida:**
+- `lib/format/relativeTime.ts` (usado pelo Histórico e por Comentários) podia mostrar "em X segundos" (futuro) para um evento que acabou de acontecer, por causa de um pequeno desvio de relógio entre o Postgres e o browser — corrigido fixando o teto do delta em zero.
+- `ClientesPanel.tsx`: o fix do botão aninhado (ver abaixo) introduziu um bug de teclado — o `onKeyDown` da linha capturava Enter/Espaço vindo dos botões internos (🔑/Excluir), cancelando a ativação deles. Corrigido checando `e.target !== e.currentTarget` antes de reagir.
+- `HistoricoPanel.tsx`: troca rápida do filtro de cliente podia deixar uma resposta antiga sobrescrever uma mais nova (sem guarda contra respostas fora de ordem). Corrigido com um contador de geração de requisição.
+- `ComentariosThread.tsx`: uma leitura falha (401/erro de rede) deixava a thread presa em "Carregando comentários…" pra sempre, sem indicar o problema.
+
+Uma revisão de código (`/code-review` em nível "high", 8 frentes de análise via subagentes) rodou sobre o diff acumulado desta leva depois das 4 features; os 4 bugs acima e mais 2 limpezas (remover duplicação de `STATUS_LABELS`/`arquivos(*)` desnecessário na listagem global) saíram dela. Achados de baixa severidade que ficaram cientes mas não corrigidos: `codigo_acesso_resetado` não salva o nome do cliente em metadata (perde a referência no Histórico se o cliente for removido depois); ambiguidade de precedência de sessão em `/api/solicitacoes/[id]/comentarios` quando o mesmo navegador tem cookie de contador e de cliente ao mesmo tempo (mesmo padrão já existente em `GET /api/solicitacoes`, não é regressão nova).
+
+**Bug pré-existente corrigido (fora do escopo original, mas simples e barato):** em `ClientesPanel.tsx`, a linha de cada cliente era um `<button>` que continha outros `<button>` (🔑 resetar código, Excluir) — HTML inválido, gerava erro de hydration no console. Trocado por `<div role="button" tabIndex={0}>` com `onKeyDown` manual (Enter/Espaço), testado com foco de teclado real via Playwright.
+
+**Verificação automática por IA — testada de ponta a ponta** via script que registra um contador/cliente/solicitação de teste reais, loga como cliente, sobe um arquivo deliberadamente errado (lista de compras pedida como comprovante de residência) e um certo (conta de energia com endereço batendo), confirma no banco `ia_validacao: "suspeito"`/`"compativel"` com `ia_observacao` coerente, confirma visualmente os badges no dashboard (`RequestsPanel`/`FileRow`, claro e escuro) e o evento correspondente na aba Histórico via Playwright. Dois problemas apareceram durante o teste e foram corrigidos: (1) o modelo hardcoded `gemini-2.5-flash` passou a rejeitar contas novas ("no longer available to new users") — trocado o default pra `gemini-flash-latest`, o alias "sempre atual" da Google, já com `GEMINI_MODEL` como escape hatch caso aconteça de novo; (2) o tier gratuito devolve 429/503 ("high demand") com alguma frequência, e ocasionalmente concatenava duas respostas JSON num texto só — adicionada uma retentativa única pra status transitório e trocado o regex de extração do JSON de guloso pra não-guloso (pega só o primeiro objeto, ignora o que vier depois). Dados de teste (contadores `teste-ia-*`, linhas no banco e arquivos no Storage) removidos ao final.
+
+**Push notifications — testada de ponta a ponta, incluindo a notificação chegando na tela de verdade.** Confirmado via Playwright + script: registro do service worker, permissão concedida, `push_subscriptions` gravada com endpoint real (`fcm.googleapis.com/...`), toggle ativar/desativar refletindo o estado real (inclusive removendo a linha do banco ao desativar), e o envio do servidor pro FCM aceito com sucesso (HTTP 201, testado tanto via `POST /api/solicitacoes` quanto isoladamente com `web-push` puro). Chrome automatizado via CDP/Playwright **não** mantém o canal persistente de push ativo (limitação conhecida de navegador headless/automatizado, não do código — confirmado tanto no navegador de teste quanto, inicialmente, na tentativa do usuário, que por engano estava usando uma janela do Chrome aberta com a flag `--no-sandbox`, sinal de automação); a notificação só apareceu de fato depois de testar num Chrome aberto normalmente. Dois bugs reais pegos durante o teste manual e corrigidos: (1) `components/portal/SolicitacoesList.tsx` quebrava com `Cannot read properties of undefined (reading 'length')` quando um item de `solicitacoes` chegava sem `arquivos` — corrigido com optional chaining (`s.arquivos?.length`), mesma blindagem aplicada em `RequestsPanel.tsx` por precaução (mesmo padrão de acesso); (2) `PushNotificationToggle.tsx` marcava o botão como "ativado" mesmo quando o `POST /api/push/subscribe` falhava no servidor (o `fetch` não lança em respostas não-2xx) — corrigido checando `res.ok` e desfazendo a inscrição no navegador (`subscription.unsubscribe()`) se o servidor não confirmar.
+
+Próximas sub-fases (fora do escopo desta entrega, ver plano): notificações por WhatsApp (deixado de fora deliberadamente — exige conta comercial verificada na Meta e tem cota paga além de um limite gratuito mensal, ao contrário de push, que é gratuito sem condição). O redesign visual completo (Tailwind) começou — ver próxima entrega abaixo.
+
+**Redesign visual (Tailwind v4) — Incremento 1 concluído: fundação + login do cliente + portal do cliente + aba "Clientes" do dashboard.** Estética "tecnológica" (dark como protagonista, glass-morphism, glow orbs, gradientes, badges em pílula) inspirada numa landing page de referência (Asimov Skills), aplicada às telas reais do produto — não uma landing page nova. Detalhes técnicos na seção "Design System" acima.
+
+O design passou por uma fase de mockup no Figma (via MCP) que produziu 3 telas em dark — Login Desktop, Login Mobile, Portal Desktop — antes de esbarrar no limite de chamadas do plano Starter do Figma MCP (a extensão foi desconectada logo depois). O usuário decidiu deliberadamente **seguir sem Figma daqui pra frente**: as telas mockadas serviram de referência de intenção visual (card de vidro centralizado, wordmark em gradiente, header sticky em vidro, badges em pílula), e a implementação em código seguiu direto, sem gate de aprovação de mockup, com julgamento de design aplicado diretamente no Tailwind e verificado via Playwright real (screenshot, não Figma).
+
+Mobile entrou já neste incremento pras telas do cliente (login + portal) — o cliente provavelmente fotografa documentos pelo celular; a aba "Clientes" do dashboard ficou desktop-only por ora (uso administrativo). Testado ponta a ponta via Playwright: login real (CPF/código da conta demo) claro/escuro/desktop/mobile, portal com solicitações reais claro/escuro/desktop/mobile, toggle de tema com persistência em `localStorage` e sem flash no reload, upload real via signed URL (feito e desfeito depois, pra não sujar a conta demo), aba Clientes expandida claro/escuro, acessibilidade de teclado do `<div role="button">` do `ClientesPanel` (Enter/Espaço expande a linha; Enter/Espaço nos botões internos 🔑/Excluir ativa só o botão, sem re-expandir/colapsar — regressão que já tinha acontecido uma vez, reconferida), `prefers-reduced-motion` (confirmado via inspeção do CSS gerado que `motion-safe:animate-fade-up/-glow-pulse/-shake` ficam dentro de `@media (prefers-reduced-motion: no-preference)`), e as 3 abas não tocadas (Prazos/Gráficos/Histórico) renderizando normalmente com a paleta nova herdada via ponte de tokens. `next build` limpo (type-check incluído). **`next lint` foi removido no Next.js 16** (substituído por ESLint direto); rodar `npx eslint .` hoje quebra com um erro de compatibilidade entre ESLint 10 e a versão de `eslint-plugin-react` empacotada por `eslint-config-next` (`contextOrFilename.getFilename is not a function`) — confirmado que é um problema de ferramental pré-existente, não relacionado a este incremento; ainda não corrigido (candidato: atualizar `eslint-config-next` ou migrar pro linter novo do Next).
+
+Um bug real foi pego e corrigido durante a verificação: em `SolicitacoesList.tsx`, o container do nome+badge (`flex flex-col` no mobile) herdava `align-items: stretch` do eixo cross, o que esticava o `StatusBadge` pra largura cheia do card em telas estreitas — corrigido fixando `items-start` incondicional (antes só existia como `sm:items-start`).
+
+**Redesign visual (Tailwind v4) — Incrementos 2-6 concluídos numa leva só: resto do dashboard, sweep de ícones e `registro.html`.** A pedido explícito do usuário ("como podemos fazer para o resto do dashboard ficar igual?" → optou por fazer tudo de uma vez, incluindo ícones e registro), esta entrega fechou o resto do roadmap do redesign visual que tinha ficado pra depois:
+- **Envios + Comentários** (Incremento 2 original): `EnviosPanel`/`StatsGrid`/`ClientCard`/`EnvioSub` (glass-card com hover de anel `ring-primary`, accordion de 3 níveis), `ClientCreateForm`/`RequestForm` (labels/inputs que antes só existiam via seletor descendente do CSS Module — agora com classes Tailwind explícitas em cada `label`/`input`/`select`/`textarea`, já que utility classes não herdam por descendência), `CodigoAcessoReveal`, `ComentariosThread` (compartilhado dashboard+portal — bolha "própria" com `bg-primary-sub`/`text-primary-txt` condicional).
+- **Prazos + Histórico + Busca** (Incremento 3 original): `PrazosPanel`, `BuscaPanel` (badge de arquivo agora usa `IconFileText`), e `HistoricoPanel` — que ganhou o mapa de ícone por tipo de evento (ver "Design System" acima).
+- **Gráficos** (Incremento 4 original): `GraficosPanel` convertido mantendo a mecânica exata dos dois gráficos (grid CSS pra barras horizontais, flex pra colunas verticais, `role="tooltip"` com `opacity` em hover/`focus-visible`, `aria-label` por barra/coluna) — só a cor virou classe Tailwind (`bg-pend`/`bg-info`/`bg-warn`/`bg-ok` no lugar de `style={{background: "var(--pend)"}}`) e o tooltip passou a usar a inversão `bg-text text-bg` (que funciona nos dois temas de graça, por já existir como token).
+- **Sweep de ícones** (Incremento 5 original, antecipado): `components/ui/icons.tsx` novo (20 ícones SVG inline) substituindo every emoji-como-ícone do app inteiro — incluindo um achado fora do escopo original: `DashboardShell.tsx` (nunca tinha sido convertido antes, tem seu próprio botão de logout ⎋) também precisou ser convertido pra Tailwind nesta leva, já que ele é o header/nav que envolve todas as abas do dashboard.
+- **`registro.html` → React** (Incremento 6 original, antecipado): `app/registro/page.tsx` + `components/registro/RegistroForm.tsx`, mesmo formulário (convite/nome/id/senha, preview de URL ao vivo normalizando o ID pra `[a-z0-9-]`, tela de sucesso com os 2 links), mesma linguagem visual do login do cliente (glass-card, wordmark em gradiente, `ThemeToggle` reaproveitado no lugar do botão de tema hand-rolled que o HTML antigo tinha). `public/registro.html` e `public/fonts/` (usada só por ele) removidos; redirect `/registro.html`→`/registro` em `next.config.ts`.
+
+Testado ponta a ponta via Playwright, claro e escuro: todas as 6 abas do dashboard, os 3 formulários (`ClientCreateForm`/`RequestForm`/`ComentariosThread`), busca real (`holerite_junho.pdf`), tooltip do gráfico por hover, e o cadastro de contador completo em `/registro` (conta `teste-redesign-verif` criada e removida ao final, mesmo padrão de limpeza dos demais dados de teste do projeto). `next build` limpo. Ver o bug de fundação (reset fora de `@layer`) pego durante essa verificação na seção "Design System" acima — é o achado mais importante desta leva, não cosmético.
+
+Com isso, o roadmap original do redesign (`C:\Users\felip\.claude\plans\contexto-estou-desenvolvendo-floofy-curry.md`) está com todo o app convertido pra Tailwind; resta só o incremento de limpeza final (remover as classes globais legadas quando/se nada mais as usar) e, fora do redesign, o WhatsApp (deixado de fora deliberadamente, ver acima).

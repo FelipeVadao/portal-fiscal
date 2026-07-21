@@ -1,6 +1,9 @@
 {
-  "framework": null,
-  "buildCommand": null,
-  "outputDirectory": ".",
-  "installCommand": null
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/prazos",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }

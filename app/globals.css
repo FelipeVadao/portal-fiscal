@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+/* Liga o variant `dark:` do Tailwind ao mesmo atributo `data-theme` que o
+   ThemeToggle e o script de pré-hidratação em app/layout.tsx já usam —
+   nenhum dos dois precisa mudar. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── TOKENS ──
+   Mesmos nomes de sempre — só os valores mudam (paleta nova, superfícies
+   translúcidas para o efeito de vidro). Componentes ainda não convertidos
+   pro Tailwind continuam lendo essas variáveis (ou as classes globais logo
+   abaixo) e ganham a paleta nova de graça, sem quebrar. */
+:root {
+  --bg: #f3f5fa;
+  --surface: rgb(255 255 255 / 70%);
+  --surface-2: rgb(248 250 252 / 85%);
+  --border: rgb(15 23 42 / 8%);
+  --primary: #4f46e5;
+  --primary-h: #4338ca;
+  --primary-sub: rgb(79 70 229 / 8%);
+  --primary-txt: #3730a3;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #94a3b8;
+  --ok: #059669;
+  --ok-bg: rgb(5 150 105 / 8%);
+  --pend: #dc2626;
+  --pend-bg: rgb(220 38 38 / 8%);
+  --warn: #d97706;
+  --warn-bg: rgb(217 119 6 / 8%);
+  --info: #0369a1;
+  --info-bg: rgb(3 105 161 / 8%);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 4%);
+  --shadow: 0 8px 24px rgb(15 23 42 / 6%), 0 2px 6px rgb(15 23 42 / 4%);
+  --shadow-lg: 0 24px 64px rgb(15 23 42 / 10%), 0 8px 24px rgb(79 70 229 / 6%);
+  --r: 12px;
+  --r-sm: 8px;
+  --t: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] {
+  --bg: #05070d;
+  --surface: rgb(19 23 38 / 60%);
+  --surface-2: rgb(26 32 51 / 75%);
+  --border: rgb(148 163 253 / 14%);
+  --primary: #818cf8;
+  --primary-h: #6366f1;
+  --primary-sub: rgb(129 140 248 / 14%);
+  --primary-txt: #c7d2fe;
+  --text: #f5f7ff;
+  --text-2: #9aa4bf;
+  --text-3: #57647f;
+  --ok: #34d399;
+  --ok-bg: rgb(52 211 153 / 12%);
+  --pend: #f87171;
+  --pend-bg: rgb(248 113 113 / 12%);
+  --warn: #fcd34d;
+  --warn-bg: rgb(252 211 77 / 12%);
+  --info: #67e8f9;
+  --info-bg: rgb(103 232 249 / 12%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 50%);
+  --shadow: 0 8px 24px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 30%);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 60%), 0 8px 24px rgb(79 70 229 / 15%);
+}
+
+/* Ponte pro Tailwind: os tokens acima viram utilities (bg-surface,
+   text-text-2, rounded-card, shadow-card...) sem duplicar valores — o
+   Tailwind referencia a mesma custom property em tempo real, então o
+   toggle de tema (que só troca `data-theme`) continua funcionando sem JS
+   extra nenhum. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-h: var(--primary-h);
+  --color-primary-sub: var(--primary-sub);
+  --color-primary-txt: var(--primary-txt);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-pend: var(--pend);
+  --color-pend-bg: var(--pend-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --radius-card: var(--r);
+  --radius-btn: var(--r-sm);
+  --shadow-card-sm: var(--shadow-sm);
+  --shadow-card: var(--shadow);
+  --shadow-card-lg: var(--shadow-lg);
+  --font-sans: var(--font-inter), "Segoe UI", system-ui, sans-serif;
+}
+
+/* Valores que não variam por tema. */
+@theme {
+  --animate-fade-up: fadeUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+  --animate-scale-in: scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  --animate-glow-pulse: glowPulse 8s ease-in-out infinite;
+  --animate-shake: shake 0.3s ease;
+}
+
+/* ── RESET ──
+   Em `@layer base`: sem isso, essas regras ficam "sem camada" e por spec de
+   CSS Cascade Layers, qualquer regra sem `@layer` tem prioridade automática
+   sobre TODAS as regras em camadas nomeadas — inclusive `@layer utilities`
+   do Tailwind, não importa a especificidade. Sem esse wrap, todo `p-*`/`m-*`
+   do Tailwind seria silenciosamente anulado pelo `margin:0;padding:0` global
+   abaixo (bug real, pego via inspeção de computed style numa conversão). */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    font-family: var(--font-inter), "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+    transition: background var(--t), color var(--t);
+  }
+  a {
+    color: inherit;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* ── PRIMITIVAS REUTILIZÁVEIS (legado — componentes ainda não convertidos
+   pro Tailwind continuam usando essas classes; removidas só no incremento
+   final de limpeza, depois que nada mais as referenciar). Em `@layer
+   components`, entre `base` e `utilities`, pelo mesmo motivo do reset acima
+   — assim qualquer utility do Tailwind combinada numa mesma tag (ex.:
+   `className="card p-8"`) continua podendo sobrescrever essas classes. */
+@layer components {
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 16px 56px;
+  }
+  .wrap--wide {
+    max-width: 1040px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-primary {
+    padding: 12px 18px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--r-sm);
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: background var(--t), transform 0.1s;
+  }
+  .btn-primary:hover {
+    background: var(--primary-h);
+  }
+  .btn-primary:active {
+    transform: scale(0.985);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color var(--t), color var(--t), background var(--t);
+  }
+  .btn-icon:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-sub);
+  }
+
+  .btn-danger-sm {
+    padding: 6px 12px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--pend);
+    background: transparent;
+    color: var(--pend);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+  }
+  .btn-danger-sm:hover {
+    background: var(--pend);
+    color: #fff;
+  }
+  .btn-danger-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .badge-ok {
+    background: var(--ok-bg);
+    color: var(--ok);
+  }
+  .badge-pend {
+    background: var(--pend-bg);
+    color: var(--pend);
+  }
+  .badge-warn {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+  .badge-info {
+    background: var(--info-bg);
+    color: var(--info);
+  }
+  .badge-neutral {
+    background: var(--primary-sub);
+    color: var(--primary-txt);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+/* ── NOVAS UTILITIES (Tailwind v4 @utility) ── */
+@utility glass-card {
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+@utility glow-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  pointer-events: none;
+}
+@utility text-gradient {
+  background: linear-gradient(135deg, var(--primary), #a78bfa);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
